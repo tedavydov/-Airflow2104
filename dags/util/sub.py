@@ -8,6 +8,7 @@ from airflow.models import Variable
 from airflow.hooks.base_hook import BaseHook
 from util.deco import python_operator
 
+
 # ===============================================================
 
 def from_db(url, query):
@@ -32,12 +33,13 @@ def to_db(url, table, df):
     # df.to_sql(table, con=engine, if_exists='append')
     df.to_sql(table, con=engine, if_exists='replace', index=False)
 
+
 @python_operator()
 def connection_operator(**context):
     hook = BaseHook.get_hook('airflow')
     hook.get_records('SELECT * FROM connection')
-    import pdb;
-    pdb.set_trace()  # дебагер - отладка программы в интерактивном режиме
+    # import pdb; pdb.set_trace()  # дебагер - отладка программы в интерактивном режиме
+
 
 # ===============================================================
 
@@ -46,7 +48,8 @@ def download_dataset(init, **context):
     # скачиваем датасет
     df = pd.read_csv(init['dataset_url'])
     # скачанный датасет пушится в XCom (он весит ~50 КБ)
-    context['dataset_src'].xcom_push(init['xcom_dataset_name'], df.to_json(orient="index"))
+    # import pdb;  pdb.set_trace()  # дебагер - отладка программы в интерактивном режиме
+    context['task_instance'].xcom_push(init['xcom_dataset_name'], df.to_json(orient="index"))
 
 
 @python_operator()
@@ -56,7 +59,7 @@ def pivot_dataset(init, **context):
         # Имена таблиц в PostgreSQL заданы в Variables
         table_name = Variable.get(table_name)
         # датасет пуллится из XCom и передается в pivot
-        data = context['dataset_src'].xcom_pull(task_ids=init['core_ops'], key=init['xcom_dataset_name'])
+        data = context['task_instance'].xcom_pull(task_ids=init['core_ops'], key=init['xcom_dataset_name'])
         df = pd.DataFrame.from_dict(json.loads(data), orient="index")
         df = df.pivot_table(index=['Sex'],
                             columns=['Pclass'],
@@ -76,7 +79,7 @@ def mean_fare_per_class(init, **context):
         # Имена таблиц в PostgreSQL заданы в Variables
         table_name = Variable.get(table_name)
         # датасет пуллится из XCom и передается в mean_fare
-        data = context['dataset_src'].xcom_pull(task_ids=init['core_ops'], key=init['xcom_dataset_name'])
+        data = context['task_instance'].xcom_pull(task_ids=init['core_ops'], key=init['xcom_dataset_name'])
         df = pd.DataFrame.from_dict(json.loads(data), orient="index")
         df = np.round(df.pivot_table(index=['Pclass'], values='Fare', aggfunc='sum').reset_index(), 2)
         to_db(init['url'], df, table_name)
