@@ -59,20 +59,24 @@ def from_db(url, query):
     # url = 'postgresql+psycopg2://airflow:airflow@localhost:5432/data_warehouse'
     # The return value of create_engine() is our connection object
     # engine = sqlalchemy.create_engine(url, client_encoding='utf8')
-    engine = create_engine('sqlite:///.\\data_warehouse.db', echo=True)
+    engine = create_engine('sqlite:///data_warehouse.db', echo=True)
     df = pd.read_sql(query, con=engine)
     return df
 
 
-def to_db(url, table, df):
+def to_db(url, df, table):
     # url = 'postgresql://airflow:airflow@localhost:5432/data_warehouse'
     # url = 'postgresql+psycopg2://airflow:airflow@localhost:5432/data_warehouse'
     # engine = sqlalchemy.create_engine(url, client_encoding='utf8')
-    engine = create_engine('sqlite:///.\\data_warehouse.db', echo=True)
+    engine = create_engine('sqlite:///data_warehouse.db', echo=True)
 
     # df.to_sql(table, con=engine, if_exists='append')
     # import pdb; pdb.set_trace()  # дебагер - отладка программы в интерактивном режиме
     df.to_sql(table, con=engine, if_exists='replace', index=False)
+
+    # # пример вызова
+    # # результат сохраняем в базу данных sqlite
+    # to_db(init['url'], df, table_name)
 
 
 # ===============================================================
@@ -100,9 +104,13 @@ def connection_operator(**context):
 def download_dataset_2(init, **context):
     # скачиваем датасет
     df = pd.read_csv(init['dataset_url'])
+
     # скачанный датасет пушится в XCom (он весит ~50 КБ)
     # import pdb;  pdb.set_trace()  # дебагер - отладка программы в интерактивном режиме
-    context['task_instance'].xcom_push(init['dataset_name'], df.to_json(orient="index"))
+    # context['task_instance'].xcom_push(init['dataset_name'], df.to_json(orient="index"))
+
+    # скачанный датасет сохраним в файл
+    df.to_csv(file_path('titanic.csv'), encoding='utf-8')
 
 
 @python_operator()
@@ -111,15 +119,28 @@ def pivot_dataset_2(init, **context):
     try:
         # Имена таблиц в PostgreSQL заданы в Variables
         table_name = Variable.get(table_name)
+
         # датасет пуллится из XCom и передается в pivot
-        data = context['task_instance'].xcom_pull(task_ids=init['core_ops'], key=init['dataset_name'])
+        # data = context['task_instance'].xcom_pull(task_ids=init['core_ops'], key=init['dataset_name'])
         # import pdb; pdb.set_trace()  # дебагер - отладка программы в интерактивном режиме
-        df = pd.DataFrame.from_string().from_dict(json.loads(data), orient="index")
-        df = df.pivot_table(index=['Sex'],
-                            columns=['Pclass'],
-                            values='Name',
-                            aggfunc='count').reset_index()
+        # df = pd.DataFrame.from_dict(json.loads(data), orient="index")
+        # df = pd.read_json(data, orient="index")  # .DataFrame.from_dict(json.loads(data), orient="index")
+
+        # датасет загружаем из файла 'titanic.csv'
+        titanic_df = pd.read_csv(file_path('titanic.csv'))
+        df = titanic_df.pivot_table(index=['Sex'],
+                                    columns=['Pclass'],
+                                    values='Name',
+                                    aggfunc='count').reset_index()
+
+        # import pdb; pdb.set_trace()  # дебагер - отладка программы в интерактивном режиме
+        # результат сохраняем в базу данных sqlite
         to_db(init['url'], df, table_name)
+
+        # проверим результат в базе данных sqlite
+        df2 = from_db(init['url'], f'select * from {table_name};')
+        df2.to_csv(file_path('from_db_pivot.csv'))
+
     except KeyError as e:
         logging.warning(f'Table: ({table_name}) variable is undefined, error: {e}')
     else:
@@ -133,10 +154,23 @@ def mean_fare_per_class_2(init, **context):
         # Имена таблиц в PostgreSQL заданы в Variables
         table_name = Variable.get(table_name)
         # датасет пуллится из XCom и передается в mean_fare
-        data = context['task_instance'].xcom_pull(task_ids=init['core_ops'], key=init['dataset_name'])
-        df = pd.DataFrame.from_dict(json.loads(data), orient="index")
-        df = np.round(df.pivot_table(index=['Pclass'], values='Fare', aggfunc='sum').reset_index(), 2)
+        # data = context['task_instance'].xcom_pull(task_ids=init['core_ops'], key=init['dataset_name'])
+        # import pdb;  pdb.set_trace()  # дебагер - отладка программы в интерактивном режиме
+        # df = pd.DataFrame.from_dict(json.loads(data), orient="index")
+
+        # датасет загружаем из файла 'titanic.csv'
+        titanic_df = pd.read_csv(file_path('titanic.csv'))
+        df = titanic_df.groupby(['Pclass']).agg({'Fare': 'mean'}).reset_index()
+        # df = np.round(df.pivot_table(index=['Pclass'], values='Fare', aggfunc='sum').reset_index(), 2)
+
+        # import pdb; pdb.set_trace()  # дебагер - отладка программы в интерактивном режиме
+        # результат сохраняем в базу данных sqlite
         to_db(init['url'], df, table_name)
+
+        # проверим результат в базе данных sqlite
+        df2 = from_db(init['url'], f'select * from {table_name};')
+        df2.to_csv(file_path('from_db_mean_fares.csv'))
+
     except KeyError as e:
         logging.warning(f'Table: ({table_name}) variable is undefined, error: {e}')
     else:
