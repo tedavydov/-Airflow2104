@@ -1,0 +1,29 @@
+{
+    "core": {
+        "dataset_name": "titanic",
+        "dataset_file": "titanic.csv",
+        "dataset_url": "https://web.stanford.edu/class/archive/cs/cs109/cs109.1166/stuff/titanic.csv",
+        "core_ops_1": "download_dataset",
+        "connect_url_0": "postgresql+psycopg2://airflow:airflow@localhost:5432/data_warehouse",
+        "connect_url_1": "postgresql://airflow:airflow@localhost:5432/data_warehouse",
+        "connect_url_2": "sqlite:///data_warehouse.db",
+        "init_param_count": 3
+    },
+    "init_param_1": {
+        "dataset_url": "dataset_url",
+        "dataset_file": "dataset_file",
+        "dataset_name": "dataset_name"
+    },
+    "init_param_2": {
+        "url": "connect_url_2",
+        "core_ops": "core_ops_1",
+        "table_name": "tab_pivot_dataset",
+        "dataset_name": "dataset_name"
+    },
+    "init_param_3": {
+        "url": "connect_url_2",
+        "core_ops": "core_ops_1",
+        "table_name": "tab_mean_fare",
+        "dataset_name": "dataset_name"
+    }
+}
